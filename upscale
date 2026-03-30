@@ -1,0 +1,48 @@
+import numpy as np
+from PIL import Image
+
+class ImageEntity:
+    def __init__(self, image_path):
+        self.original = Image.open(image_path).convert('RGB')
+        self.width, self.height = self.original.size
+        
+    def dive_and_compress(self, scale=0.5):
+        """Shrinks the image and calculates the 'Wave' (Difference Map)"""
+        # 1. Create the low-res version
+        low_res_size = (int(self.width * scale), int(self.height * scale))
+        low_res = self.original.resize(low_res_size, Image.BILINEAR)
+        
+        # 2. Upscale it back temporarily to see what we 'lost'
+        reconstructed_low = low_res.resize((self.width, self.height), Image.BILINEAR)
+        
+        # 3. Calculate the 'Wave Map' (The extra info needed to restore it)
+        # This is the 'Optimization Info' you mentioned
+        original_array = np.array(self.original).astype(np.int16)
+        low_array = np.array(reconstructed_low).astype(np.int16)
+        
+        wave_map = original_array - low_array # The 'details' lost during diving
+        
+        return low_res, wave_map
+
+    def surface_and_restore(self, low_res, wave_map):
+        """Uses the low-res image + the separate wave file to restore the original"""
+        # Upscale the low-res base
+        base = low_res.resize((self.width, self.height), Image.BILINEAR)
+        base_array = np.array(base).astype(np.int16)
+        
+        # Apply the 'Wave' (Add back the lost optimization info)
+        restored_array = np.clip(base_array + wave_map, 0, 255).astype(np.uint8)
+        
+        return Image.fromarray(restored_array)
+
+# Execution logic
+entity = ImageEntity('green-field-with-yellow-dandelions.jpg')
+
+# Perform the 'Dive'
+low_res_img, detail_key = entity.dive_and_compress()
+
+# Save the two separate files
+low_res_img.save('low_res_version.jpg')
+np.save('upscale_logic_key.npy', detail_key) # This is your 'Separate File'
+
+print("Compression complete. You now have the low-res image and a 'Logic Key' file.")
